@@ -1,4 +1,4 @@
-apiVersion: plugin.openeverest.io/v1alpha1
+apiVersion: core.openeverest.io/v1alpha1
 kind: Plugin
 metadata:
   name: {{ .Release.Name }}
