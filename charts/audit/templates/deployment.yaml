@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "audit.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "audit.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # SQLite is single-writer; recreate on upgrade to avoid two pods touching the
+  # PVC at once. Phase 2 (PostgreSQL backend) will relax this to RollingUpdate.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "audit.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "audit.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.service.port | quote }}
+            - name: AUDIT_DB_PATH
+              value: {{ .Values.storage.sqlite.path | quote }}
+            {{- with .Values.plugin.eventTypes }}
+            - name: AUDIT_EVENT_TYPES
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.plugin.namespaces }}
+            - name: AUDIT_NAMESPACES
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- if .Values.everestAPIURL }}
+            - name: EVEREST_API_URL
+              value: {{ .Values.everestAPIURL | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ dir .Values.storage.sqlite.path | quote }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.storage.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "audit.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

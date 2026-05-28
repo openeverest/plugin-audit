@@ -1,0 +1,6 @@
+apiVersion: v2
+name: audit
+description: OpenEverest generic plugin that captures and stores lifecycle events for auditing.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

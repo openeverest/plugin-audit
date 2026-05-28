@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-bundle
+          path: backend/dist/main.js
+          retention-days: 1
+
+  backend:
+    runs-on: ubuntu-latest
+    needs: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-bundle
+          path: backend/dist
+      - name: Ensure embed targets exist
+        run: |
+          mkdir -p backend/dist
+          [ -f backend/dist/main.js ] || touch backend/dist/main.js
+          [ -f backend/dist/icon.png ] || cp src/icon.png backend/dist/icon.png || touch backend/dist/icon.png
+      - working-directory: backend
+        run: |
+          go vet ./...
+          go test ./...
+          CGO_ENABLED=0 go build -o /tmp/audit-server .
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+      - run: helm lint charts/audit
+      - run: helm template test charts/audit > /tmp/rendered.yaml
+      - run: cat /tmp/rendered.yaml | head -200
