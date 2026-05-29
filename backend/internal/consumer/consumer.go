@@ -85,7 +85,13 @@ func (c *Consumer) streamOnce(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	if token, err := c.token(); err == nil && token != "" {
+	token, tokenErr := c.token()
+	if tokenErr != nil {
+		return fmt.Errorf("read token from %s: %w", c.cfg.TokenPath, tokenErr)
+	}
+	if token == "" {
+		log.Printf("WARNING: no token found at %s — request will be unauthenticated", c.cfg.TokenPath)
+	} else {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
