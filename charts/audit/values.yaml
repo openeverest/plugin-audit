@@ -13,6 +13,13 @@ fullnameOverride: ""
 service:
   port: 8080
 
+# Authentication for the event stream connection.
+# Until the host implements spec 003 §10.4 (projected plugin service tokens),
+# the plugin authenticates via POST /v1/session using credentials from a Secret.
+# Create a Secret with keys "username" and "password", then reference its name here.
+auth:
+  credentialsSecretName: ""
+
 plugin:
   displayName: "Audit Log"
   description: "Captures OpenEverest lifecycle events and exposes them as a searchable audit log."

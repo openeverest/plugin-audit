@@ -8,7 +8,9 @@ package consumer
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/openeverest/plugin-audit/backend/internal/config"
@@ -27,6 +30,10 @@ type Consumer struct {
 	cfg   config.Config
 	store store.Store
 	http  *http.Client
+
+	mu          sync.Mutex
+	cachedToken string
+	tokenExpiry time.Time
 }
 
 func New(cfg config.Config, st store.Store) *Consumer {
@@ -85,12 +92,12 @@ func (c *Consumer) streamOnce(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	token, tokenErr := c.token()
+	token, tokenErr := c.getToken(ctx)
 	if tokenErr != nil {
-		return fmt.Errorf("read token from %s: %w", c.cfg.TokenPath, tokenErr)
+		return fmt.Errorf("obtain auth token: %w", tokenErr)
 	}
 	if token == "" {
-		log.Printf("WARNING: no token found at %s — request will be unauthenticated", c.cfg.TokenPath)
+		log.Printf("WARNING: no authentication configured — request will be unauthenticated")
 	} else {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -189,18 +196,92 @@ func (c *Consumer) handleEvent(ctx context.Context, raw []byte) error {
 	return nil
 }
 
-func (c *Consumer) token() (string, error) {
-	if c.cfg.TokenPath == "" {
+// getToken returns a valid bearer token. Strategy:
+//  1. If a projected service token file exists at TokenPath, read it (spec 003 §10.4).
+//  2. Otherwise, if ServiceUser/ServicePassword are configured, authenticate via
+//     POST /v1/session and cache the JWT until shortly before expiry.
+//  3. If neither is configured, return empty (unauthenticated).
+func (c *Consumer) getToken(ctx context.Context) (string, error) {
+	// Strategy 1: projected token file (future host-issued service token).
+	if c.cfg.TokenPath != "" {
+		b, err := os.ReadFile(c.cfg.TokenPath)
+		if err == nil {
+			t := strings.TrimSpace(string(b))
+			if t != "" {
+				return t, nil
+			}
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("read token file %s: %w", c.cfg.TokenPath, err)
+		}
+	}
+
+	// Strategy 2: credential-based login.
+	if c.cfg.ServiceUser == "" || c.cfg.ServicePassword == "" {
 		return "", nil
 	}
-	b, err := os.ReadFile(c.cfg.TokenPath)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Return cached token if still valid (with 5-minute safety margin).
+	if c.cachedToken != "" && time.Now().Before(c.tokenExpiry.Add(-5*time.Minute)) {
+		return c.cachedToken, nil
+	}
+
+	// Authenticate.
+	body, _ := json.Marshal(map[string]string{
+		"username": c.cfg.ServiceUser,
+		"password": c.cfg.ServicePassword,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.cfg.EverestAPIURL+"/v1/session", bytes.NewReader(body))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
 		return "", err
 	}
-	return strings.TrimSpace(string(b)), nil
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("session request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("session auth failed (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var result struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode session response: %w", err)
+	}
+
+	c.cachedToken = result.Token
+	// Default to 23h expiry if we can't parse the token.
+	c.tokenExpiry = time.Now().Add(23 * time.Hour)
+
+	// Try to extract actual expiry from JWT claims (middle segment).
+	parts := strings.Split(result.Token, ".")
+	if len(parts) == 3 {
+		if payload, err := decodeJWTSegment(parts[1]); err == nil {
+			var claims struct {
+				Exp int64 `json:"exp"`
+			}
+			if json.Unmarshal(payload, &claims) == nil && claims.Exp > 0 {
+				c.tokenExpiry = time.Unix(claims.Exp, 0)
+			}
+		}
+	}
+
+	log.Printf("authenticated to Everest API as %q (token expires %s)", c.cfg.ServiceUser, c.tokenExpiry.Format(time.RFC3339))
+	return c.cachedToken, nil
+}
+
+// decodeJWTSegment decodes a base64url-encoded JWT segment.
+func decodeJWTSegment(seg string) ([]byte, error) {
+	return base64.RawURLEncoding.DecodeString(seg)
 }
 
 func nextBackoff(d time.Duration) time.Duration {

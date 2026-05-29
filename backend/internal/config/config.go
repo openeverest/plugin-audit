@@ -17,7 +17,14 @@ type Config struct {
 	EverestAPIURL string
 
 	// TokenPath is the path to the projected plugin service token (spec 003 §10.4).
+	// Used when the host implements the daemon token service (Phase 3).
 	TokenPath string
+
+	// ServiceUser and ServicePassword are credentials for authenticating against
+	// the Everest API via POST /v1/session. Used as a fallback until the host
+	// provides projected service tokens.
+	ServiceUser     string
+	ServicePassword string
 
 	// DBPath is the on-disk location of the SQLite database.
 	DBPath string
@@ -33,11 +40,13 @@ type Config struct {
 
 func FromEnv() Config {
 	return Config{
-		Port:          getenv("PORT", "8080"),
-		EverestAPIURL: discoverEverestAPI(),
-		TokenPath:     getenv("EVEREST_TOKEN_PATH", "/var/run/secrets/everest/token"),
-		DBPath:        getenv("AUDIT_DB_PATH", "/data/audit.db"),
-		EventTypes:    os.Getenv("AUDIT_EVENT_TYPES"),
+		Port:            getenv("PORT", "8080"),
+		EverestAPIURL:   discoverEverestAPI(),
+		TokenPath:       getenv("EVEREST_TOKEN_PATH", "/var/run/secrets/everest/token"),
+		ServiceUser:     os.Getenv("EVEREST_SERVICE_USER"),
+		ServicePassword: os.Getenv("EVEREST_SERVICE_PASSWORD"),
+		DBPath:          getenv("AUDIT_DB_PATH", "/data/audit.db"),
+		EventTypes:      os.Getenv("AUDIT_EVENT_TYPES"),
 		Namespaces:    os.Getenv("AUDIT_NAMESPACES"),
 	}
 }

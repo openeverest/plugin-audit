@@ -47,6 +47,18 @@ spec:
             - name: EVEREST_API_URL
               value: {{ .Values.everestAPIURL | quote }}
             {{- end }}
+            {{- with .Values.auth.credentialsSecretName }}
+            - name: EVEREST_SERVICE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: username
+            - name: EVEREST_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: password
+            {{- end }}
           volumeMounts:
             - name: data
               mountPath: {{ dir .Values.storage.sqlite.path | quote }}
