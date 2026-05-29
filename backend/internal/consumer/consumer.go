@@ -17,7 +17,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -96,11 +95,7 @@ func (c *Consumer) streamOnce(ctx context.Context) error {
 	if tokenErr != nil {
 		return fmt.Errorf("obtain auth token: %w", tokenErr)
 	}
-	if token == "" {
-		log.Printf("WARNING: no authentication configured — request will be unauthenticated")
-	} else {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -196,28 +191,16 @@ func (c *Consumer) handleEvent(ctx context.Context, raw []byte) error {
 	return nil
 }
 
-// getToken returns a valid bearer token. Strategy:
-//  1. If a projected service token file exists at TokenPath, read it (spec 003 §10.4).
-//  2. Otherwise, if ServiceUser/ServicePassword are configured, authenticate via
-//     POST /v1/session and cache the JWT until shortly before expiry.
-//  3. If neither is configured, return empty (unauthenticated).
+// getToken returns a valid bearer token by authenticating against the Everest
+// API via POST /v1/session and caching the JWT until shortly before expiry.
+//
+// Note: spec 003 §10.4 envisions the host issuing autonomous plugin service
+// tokens via a projected Secret. Until that lands, plugins must log in like a
+// regular client using credentials supplied via EVEREST_SERVICE_USER /
+// EVEREST_SERVICE_PASSWORD.
 func (c *Consumer) getToken(ctx context.Context) (string, error) {
-	// Strategy 1: projected token file (future host-issued service token).
-	if c.cfg.TokenPath != "" {
-		b, err := os.ReadFile(c.cfg.TokenPath)
-		if err == nil {
-			t := strings.TrimSpace(string(b))
-			if t != "" {
-				return t, nil
-			}
-		} else if !os.IsNotExist(err) {
-			return "", fmt.Errorf("read token file %s: %w", c.cfg.TokenPath, err)
-		}
-	}
-
-	// Strategy 2: credential-based login.
 	if c.cfg.ServiceUser == "" || c.cfg.ServicePassword == "" {
-		return "", nil
+		return "", fmt.Errorf("EVEREST_SERVICE_USER / EVEREST_SERVICE_PASSWORD must be set")
 	}
 
 	c.mu.Lock()

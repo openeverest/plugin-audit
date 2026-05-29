@@ -16,13 +16,9 @@ type Config struct {
 	// http://everest-server.everest-system.svc.cluster.local:8080).
 	EverestAPIURL string
 
-	// TokenPath is the path to the projected plugin service token (spec 003 §10.4).
-	// Used when the host implements the daemon token service (Phase 3).
-	TokenPath string
-
 	// ServiceUser and ServicePassword are credentials for authenticating against
-	// the Everest API via POST /v1/session. Used as a fallback until the host
-	// provides projected service tokens.
+	// the Everest API via POST /v1/session. Required until the host provides
+	// projected service tokens (spec 003 §10.4).
 	ServiceUser     string
 	ServicePassword string
 
@@ -42,7 +38,6 @@ func FromEnv() Config {
 	return Config{
 		Port:            getenv("PORT", "8080"),
 		EverestAPIURL:   discoverEverestAPI(),
-		TokenPath:       getenv("EVEREST_TOKEN_PATH", "/var/run/secrets/everest/token"),
 		ServiceUser:     os.Getenv("EVEREST_SERVICE_USER"),
 		ServicePassword: os.Getenv("EVEREST_SERVICE_PASSWORD"),
 		DBPath:          getenv("AUDIT_DB_PATH", "/data/audit.db"),

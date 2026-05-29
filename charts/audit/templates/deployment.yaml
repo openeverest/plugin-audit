@@ -62,9 +62,6 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ dir .Values.storage.sqlite.path | quote }}
-            - name: everest-token
-              mountPath: /var/run/secrets/everest
-              readOnly: true
           livenessProbe:
             httpGet:
               path: /healthz
@@ -79,7 +76,6 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      serviceAccountName: {{ include "audit.fullname" . }}
       volumes:
         - name: data
           {{- if .Values.storage.persistence.enabled }}
@@ -88,10 +84,3 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
-        - name: everest-token
-          projected:
-            sources:
-              - serviceAccountToken:
-                  audience: openeverest
-                  expirationSeconds: 3600
-                  path: token
