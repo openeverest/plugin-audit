@@ -1,19 +1,49 @@
-let e, D;
-async function d(n) {
-  const t = await D(`/api${n}`);
+let b = null;
+const L = (n, t) => {
+  b = n;
+}, F = () => {
+  b = null;
+}, _ = () => b || localStorage.getItem("everestToken");
+let m = null;
+const O = () => (m || (m = fetch("/v1/auth/token", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    grant_type: "refresh_token",
+    refresh_token_delivery: "cookie"
+  })
+}).then(async (t) => {
+  if (!t.ok) throw new Error(`refresh failed: ${t.status}`);
+  const a = await t.json();
+  return L(a.access_token, a.expires_in), a.access_token;
+}).catch(() => (F(), null)).finally(() => {
+  m = null;
+})), m);
+let e, T;
+async function j(n) {
+  const t = () => {
+    const o = {}, s = _();
+    return s && (o.Authorization = `Bearer ${s}`), T(n, { credentials: "include", headers: o });
+  };
+  let a = await t();
+  return a.status === 401 && await O() && (a = await t()), a;
+}
+async function u(n) {
+  const t = await j(`/api${n}`);
   if (!t.ok) {
-    const o = await t.text().catch(() => "");
-    throw new Error(o || `HTTP ${t.status}`);
+    const a = await t.text().catch(() => "");
+    throw new Error(a || `HTTP ${t.status}`);
   }
   return t.json();
 }
-function w(n) {
+function D(n) {
   const t = new URLSearchParams();
   n.types.length && t.set("types", n.types.join(",")), n.namespaces.length && t.set("namespaces", n.namespaces.join(",")), n.search.trim() && t.set("search", n.search.trim()), n.since && t.set("since", new Date(n.since).toISOString()), n.until && t.set("until", new Date(n.until).toISOString()), t.set("limit", String(n.limit)), n.beforeID && t.set("beforeID", String(n.beforeID));
-  const o = t.toString();
-  return o ? `?${o}` : "";
+  const a = t.toString();
+  return a ? `?${a}` : "";
 }
-const u = {
+const p = {
   types: [],
   namespaces: [],
   search: "",
@@ -130,26 +160,26 @@ function C(n) {
   const t = new Date(n);
   return isNaN(t.getTime()) ? n : t.toLocaleString();
 }
-const N = (n) => {
-  const [t, o] = e.useState(u), [a, s] = e.useState(u), [i, b] = e.useState([]), [y, h] = e.useState(null), [I, A] = e.useState([]), [R, T] = e.useState([]), [f, m] = e.useState(!1), [E, g] = e.useState(null), [v, S] = e.useState(null);
+const K = (n) => {
+  const [t, a] = e.useState(p), [o, s] = e.useState(p), [i, E] = e.useState([]), [y, v] = e.useState(null), [A, $] = e.useState([]), [R, z] = e.useState([]), [g, d] = e.useState(!1), [S, h] = e.useState(null), [k, w] = e.useState(null);
   e.useEffect(() => {
-    d("/events/types").then((l) => A(l.items ?? [])).catch(() => {
-    }), d("/events/namespaces").then((l) => T(l.items ?? [])).catch(() => {
+    u("/events/types").then((l) => $(l.items ?? [])).catch(() => {
+    }), u("/events/namespaces").then((l) => z(l.items ?? [])).catch(() => {
     });
   }, []), e.useEffect(() => {
     let l = !1;
-    return m(!0), g(null), d("/events" + w(t)).then((c) => {
-      l || (b(c.items ?? []), h(c.nextBeforeID ?? null));
-    }).catch((c) => !l && g(c.message)).finally(() => !l && m(!1)), () => {
+    return d(!0), h(null), u("/events" + D(t)).then((c) => {
+      l || (E(c.items ?? []), v(c.nextBeforeID ?? null));
+    }).catch((c) => !l && h(c.message)).finally(() => !l && d(!1)), () => {
       l = !0;
     };
   }, [t]);
-  const x = () => o({ ...a, beforeID: null }), $ = () => {
-    s(u), o(u);
-  }, z = () => {
-    y != null && (m(!0), d("/events" + w({ ...t, beforeID: y })).then((l) => {
-      b((c) => [...c, ...l.items ?? []]), h(l.nextBeforeID ?? null);
-    }).catch((l) => g(l.message)).finally(() => m(!1)));
+  const x = () => a({ ...o, beforeID: null }), N = () => {
+    s(p), a(p);
+  }, B = () => {
+    y != null && (d(!0), u("/events" + D({ ...t, beforeID: y })).then((l) => {
+      E((c) => [...c, ...l.items ?? []]), v(l.nextBeforeID ?? null);
+    }).catch((l) => h(l.message)).finally(() => d(!1)));
   };
   return e.createElement(
     "div",
@@ -163,10 +193,10 @@ const N = (n) => {
         "div",
         { style: r.field },
         e.createElement("label", { style: r.label }, "Event types"),
-        e.createElement(k, {
-          options: I,
-          value: a.types,
-          onChange: (l) => s({ ...a, types: l }),
+        e.createElement(I, {
+          options: A,
+          value: o.types,
+          onChange: (l) => s({ ...o, types: l }),
           placeholder: "All types"
         })
       ),
@@ -174,10 +204,10 @@ const N = (n) => {
         "div",
         { style: r.field },
         e.createElement("label", { style: r.label }, "Namespaces"),
-        e.createElement(k, {
+        e.createElement(I, {
           options: R,
-          value: a.namespaces,
-          onChange: (l) => s({ ...a, namespaces: l }),
+          value: o.namespaces,
+          onChange: (l) => s({ ...o, namespaces: l }),
           placeholder: "All namespaces"
         })
       ),
@@ -189,8 +219,8 @@ const N = (n) => {
           style: r.input,
           type: "text",
           placeholder: "name or payload…",
-          value: a.search,
-          onChange: (l) => s({ ...a, search: l.target.value }),
+          value: o.search,
+          onChange: (l) => s({ ...o, search: l.target.value }),
           onKeyDown: (l) => l.key === "Enter" && x()
         })
       ),
@@ -201,8 +231,8 @@ const N = (n) => {
         e.createElement("input", {
           style: r.input,
           type: "datetime-local",
-          value: a.since,
-          onChange: (l) => s({ ...a, since: l.target.value })
+          value: o.since,
+          onChange: (l) => s({ ...o, since: l.target.value })
         })
       ),
       e.createElement(
@@ -212,15 +242,15 @@ const N = (n) => {
         e.createElement("input", {
           style: r.input,
           type: "datetime-local",
-          value: a.until,
-          onChange: (l) => s({ ...a, until: l.target.value })
+          value: o.until,
+          onChange: (l) => s({ ...o, until: l.target.value })
         })
       ),
       e.createElement("button", { style: r.button, onClick: x }, "Apply"),
-      e.createElement("button", { style: r.buttonGhost, onClick: $ }, "Reset")
+      e.createElement("button", { style: r.buttonGhost, onClick: N }, "Reset")
     ),
-    E && e.createElement("div", { style: r.banner("error") }, `✗ ${E}`),
-    f && i.length === 0 ? e.createElement("div", { style: r.banner("info") }, "Loading…") : i.length === 0 ? e.createElement(
+    S && e.createElement("div", { style: r.banner("error") }, `✗ ${S}`),
+    g && i.length === 0 ? e.createElement("div", { style: r.banner("info") }, "Loading…") : i.length === 0 ? e.createElement(
       "div",
       { style: r.banner("info") },
       "No events yet. Once the plugin daemon connects to /v1/events, captured events will appear here."
@@ -251,7 +281,7 @@ const N = (n) => {
             {
               key: l.id,
               style: r.rowHover,
-              onClick: () => S(l)
+              onClick: () => w(l)
             },
             e.createElement("td", { style: r.td }, C(l.occurredAt)),
             e.createElement(
@@ -279,60 +309,60 @@ const N = (n) => {
       { style: { marginTop: "1rem", textAlign: "center" } },
       e.createElement(
         "button",
-        { style: r.buttonGhost, onClick: z, disabled: f },
-        f ? "Loading…" : "Load more"
+        { style: r.buttonGhost, onClick: B, disabled: g },
+        g ? "Loading…" : "Load more"
       )
     ),
-    v && e.createElement(L, { event: v, onClose: () => S(null) })
+    k && e.createElement(P, { event: k, onClose: () => w(null) })
   );
-}, L = (n) => {
-  const { event: t, onClose: o } = n;
+}, P = (n) => {
+  const { event: t, onClose: a } = n;
   return e.createElement(
     "div",
     { style: r.drawer },
-    e.createElement("button", { style: r.drawerClose, onClick: o, "aria-label": "Close" }, "×"),
+    e.createElement("button", { style: r.drawerClose, onClick: a, "aria-label": "Close" }, "×"),
     e.createElement("h2", { style: { marginTop: 0 } }, t.type),
     e.createElement("p", { style: { color: "#555", marginTop: 0 } }, C(t.occurredAt)),
     e.createElement(
       "dl",
       { style: { display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1rem", fontSize: "0.875rem" } },
-      p("Namespace", t.namespace),
-      p("Resource", t.resourceKind ? `${t.resourceKind}/${t.resourceName ?? ""}` : void 0),
-      p("Actor", t.actorID ? `${t.actorType ?? ""}:${t.actorID}` : void 0),
-      p("Resource version", t.resourceVersion)
+      f("Namespace", t.namespace),
+      f("Resource", t.resourceKind ? `${t.resourceKind}/${t.resourceName ?? ""}` : void 0),
+      f("Actor", t.actorID ? `${t.actorType ?? ""}:${t.actorID}` : void 0),
+      f("Resource version", t.resourceVersion)
     ),
     e.createElement("h3", null, "Envelope"),
     e.createElement("pre", { style: r.pre }, JSON.stringify(t.envelope, null, 2))
   );
 };
-function p(n, t) {
+function f(n, t) {
   return t ? [
     e.createElement("dt", { key: `${n}-l`, style: { color: "#666" } }, n),
     e.createElement("dd", { key: `${n}-v`, style: { margin: 0 } }, t)
   ] : null;
 }
-const k = (n) => e.createElement(
+const I = (n) => e.createElement(
   "select",
   {
     multiple: !0,
     style: { ...r.input, minHeight: 80, minWidth: 220 },
     value: n.value,
     onChange: (t) => {
-      const o = Array.from(t.target.selectedOptions, (a) => a.value);
-      n.onChange(o);
+      const a = Array.from(t.target.selectedOptions, (o) => o.value);
+      n.onChange(a);
     }
   },
   n.options.length === 0 ? e.createElement("option", { disabled: !0, value: "" }, n.placeholder ?? "—") : n.options.map((t) => e.createElement("option", { key: t, value: t }, t))
-), B = (n) => {
-  e = n.React, D = n.fetch.bind(n), n.registerExtension({
+), H = (n) => {
+  e = n.React, T = n.fetch.bind(n), n.registerExtension({
     type: "sidebarItem",
     label: "Audit Log"
   }), n.registerExtension({
     type: "route",
     label: "Audit Log",
-    component: N
+    component: K
   });
 };
 export {
-  B as default
+  H as default
 };
