@@ -1,13 +1,13 @@
 # ──────────────────────────────────────────────────────────────────
 # Stage 1 — Build the Go backend.
 # Expects backend/dist/main.js to be pre-built (npm run build) and
-# backend/dist/icon.png to be present in the build context.
 # ──────────────────────────────────────────────────────────────────
 FROM golang:1.22-alpine AS backend-builder
 
 WORKDIR /app
 
 COPY backend/go.mod backend/go.sum* ./
+COPY src/audit-icon.png ./dist/icon.png
 RUN go mod download
 
 COPY backend/ ./
