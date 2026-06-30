@@ -3,11 +3,7 @@ node_modules/
 
 # Build output
 /dist/
-
-# Go — override: keep embed placeholders
-backend/dist/*
-!backend/dist/main.js
-!backend/dist/icon.png
+backend/dist/
 
 # IDE
 .idea/

@@ -3,8 +3,11 @@ import type {
   PluginApi,
   PluginRouteProps,
 } from '@openeverest/plugin-sdk';
+import { getAuthToken, refreshSession } from './auth';
 
-// React and the host-authenticated fetch are injected by the host at runtime.
+// React and the host's plugin-proxy fetch are injected by the host at runtime.
+// pluginFetch handles URL prefixing (/v1/plugins/<name>/...) but the plugin
+// attaches its own Authorization header — see api() below.
 let React: PluginApi['React'];
 let pluginFetch: PluginApi['fetch'];
 
@@ -32,8 +35,23 @@ type ListResponse = {
 // ---------------------------------------------------------------------------
 // API client
 // ---------------------------------------------------------------------------
+async function authedFetch(path: string): Promise<Response> {
+  const send = () => {
+    const headers: Record<string, string> = {};
+    const token = getAuthToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return pluginFetch(path, { credentials: 'include', headers });
+  };
+  let res = await send();
+  if (res.status === 401) {
+    const refreshed = await refreshSession();
+    if (refreshed) res = await send();
+  }
+  return res;
+}
+
 async function api<T>(path: string): Promise<T> {
-  const res = await pluginFetch(`/api${path}`);
+  const res = await authedFetch(`/api${path}`);
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status}`);

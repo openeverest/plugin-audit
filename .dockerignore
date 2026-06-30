@@ -1,0 +1,13 @@
+node_modules/
+dist/
+backend/dist/
+.git/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local

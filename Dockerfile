@@ -1,7 +1,21 @@
 # ──────────────────────────────────────────────────────────────────
-# Stage 1 — Build the Go backend.
-# Expects backend/dist/main.js to be pre-built (npm run build) and
-# backend/dist/icon.png to be present in the build context.
+# Stage 1 — Build the frontend bundle that gets embedded into the Go
+# binary. Vite is configured (vite.config.ts) to emit to backend/dist/main.js.
+# ──────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tsconfig.json vite.config.ts ./
+COPY src/ ./src/
+
+RUN npm run build
+
+# ──────────────────────────────────────────────────────────────────
+# Stage 2 — Build the Go backend, embedding the frontend bundle and icon.
 # ──────────────────────────────────────────────────────────────────
 FROM golang:1.22-alpine AS backend-builder
 
@@ -12,12 +26,15 @@ RUN go mod download
 
 COPY backend/ ./
 
-# CGO is required by the modernc.SQLite-free driver alternative; we use
-# modernc.org/sqlite (pure Go) so CGO can stay disabled.
+# Provide the assets required by //go:embed directives in backend/main.go.
+COPY src/audit-icon.png ./dist/icon.png
+COPY --from=frontend-builder /app/backend/dist/main.js ./dist/main.js
+
+# We use modernc.org/sqlite (pure Go), so CGO can stay disabled.
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o server .
 
 # ──────────────────────────────────────────────────────────────────
-# Stage 2 — Minimal runtime image.
+# Stage 3 — Minimal runtime image.
 # ──────────────────────────────────────────────────────────────────
 FROM alpine:3.19
 
