@@ -154,7 +154,9 @@ func (c *Consumer) readSSE(ctx context.Context, body io.Reader) error {
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-	_ = flush()
+	if err := flush(); err != nil {
+		log.Printf("handle event: %v", err)
+	}
 	return io.EOF
 }
 
