@@ -13,18 +13,6 @@ spec:
       namespace: {{ .Release.Namespace }}
       name: {{ include "audit.fullname" . }}
       port: {{ .Values.service.port }}
-    modes:
-      requestHandler:
-        basePath: "/"
-      daemon:
-        healthPath: "/healthz"
-      eventConsumer:
-        types:
-          {{- toYaml .Values.plugin.eventTypes | nindent 10 }}
-        {{- with .Values.plugin.namespaces }}
-        namespaces:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
   frontend:
     bundlePath: {{ .Values.plugin.bundlePath | quote }}
     extensionPoints:
