@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,9 +48,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start the SSE event consumer in the background.
+	// Start the SSE event consumer in the background. wg lets shutdown wait
+	// for it to actually stop (flush its in-flight insert/cursor-save) before
+	// the store is closed below.
+	var wg sync.WaitGroup
 	cons := consumer.New(cfg, st)
-	go cons.Run(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cons.Run(ctx)
+	}()
 
 	mux := http.NewServeMux()
 	api.Register(mux, st, distFS, iconData)
@@ -77,4 +85,5 @@ func main() {
 	defer shutdownCancel()
 	_ = srv.Shutdown(shutdownCtx)
 	cancel()
+	wg.Wait()
 }
