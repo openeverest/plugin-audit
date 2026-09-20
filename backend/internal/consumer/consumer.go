@@ -10,7 +10,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -192,7 +191,7 @@ func (c *Consumer) handleEvent(ctx context.Context, raw []byte) error {
 }
 
 // getToken returns a valid bearer token by authenticating against the Everest
-// API via POST /v1/session and caching the JWT until shortly before expiry.
+// API via POST /v1/auth/token and caching it until shortly before expiry.
 //
 // Note: spec 003 §10.4 envisions the host issuing autonomous plugin service
 // tokens via a projected Secret. Until that lands, plugins must log in like a
@@ -213,11 +212,12 @@ func (c *Consumer) getToken(ctx context.Context) (string, error) {
 
 	// Authenticate.
 	body, _ := json.Marshal(map[string]string{
-		"username": c.cfg.ServiceUser,
-		"password": c.cfg.ServicePassword,
+		"grant_type": "password",
+		"username":   c.cfg.ServiceUser,
+		"password":   c.cfg.ServicePassword,
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.cfg.EverestAPIURL+"/v1/session", bytes.NewReader(body))
+		c.cfg.EverestAPIURL+"/v1/auth/token", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -225,46 +225,28 @@ func (c *Consumer) getToken(ctx context.Context) (string, error) {
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("session request: %w", err)
+		return "", fmt.Errorf("token request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", fmt.Errorf("session auth failed (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return "", fmt.Errorf("token auth failed (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 
 	var result struct {
-		Token string `json:"token"`
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode session response: %w", err)
+		return "", fmt.Errorf("decode token response: %w", err)
 	}
 
-	c.cachedToken = result.Token
-	// Default to 23h expiry if we can't parse the token.
-	c.tokenExpiry = time.Now().Add(23 * time.Hour)
-
-	// Try to extract actual expiry from JWT claims (middle segment).
-	parts := strings.Split(result.Token, ".")
-	if len(parts) == 3 {
-		if payload, err := decodeJWTSegment(parts[1]); err == nil {
-			var claims struct {
-				Exp int64 `json:"exp"`
-			}
-			if json.Unmarshal(payload, &claims) == nil && claims.Exp > 0 {
-				c.tokenExpiry = time.Unix(claims.Exp, 0)
-			}
-		}
-	}
+	c.cachedToken = result.AccessToken
+	c.tokenExpiry = time.Now().Add(time.Duration(result.ExpiresIn) * time.Second)
 
 	log.Printf("authenticated to Everest API as %q (token expires %s)", c.cfg.ServiceUser, c.tokenExpiry.Format(time.RFC3339))
 	return c.cachedToken, nil
-}
-
-// decodeJWTSegment decodes a base64url-encoded JWT segment.
-func decodeJWTSegment(seg string) ([]byte, error) {
-	return base64.RawURLEncoding.DecodeString(seg)
 }
 
 func nextBackoff(d time.Duration) time.Duration {
