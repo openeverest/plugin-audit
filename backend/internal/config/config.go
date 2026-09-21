@@ -17,7 +17,7 @@ type Config struct {
 	EverestAPIURL string
 
 	// ServiceUser and ServicePassword are credentials for authenticating against
-	// the Everest API via POST /v1/session. Required until the host provides
+	// the Everest API via POST /v1/auth/token. Required until the host provides
 	// projected service tokens (spec 003 §10.4).
 	ServiceUser     string
 	ServicePassword string
